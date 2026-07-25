@@ -1,0 +1,23 @@
+[package]
+name = "noema-protocol"
+description = "Strict cloud-model protocol gateway for Noema Linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[features]
+default = []
+openai = ["dep:reqwest"]
+
+[dependencies]
+noema-contract.workspace = true
+noema-ir.workspace = true
+reqwest = { workspace = true, optional = true }
+serde_json.workspace = true
+
+[dev-dependencies]
+noema-state.workspace = true
+
+[lints]
+workspace = true

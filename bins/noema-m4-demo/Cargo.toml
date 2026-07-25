@@ -1,0 +1,14 @@
+[package]
+name = "noema-m4-demo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+noema-contract.workspace = true
+noema-ir.workspace = true
+noema-protocol.workspace = true
+noema-reconciler.workspace = true
+
+[lints]
+workspace = true

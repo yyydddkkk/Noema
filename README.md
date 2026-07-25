@@ -10,8 +10,10 @@ generation or preserves the previous one.
 
 ## Status
 
-Noema has completed its M3 container-backed process loop. It is not yet an
-operating system image and must not be used to manage a host machine.
+Noema has completed its M3 container-backed process loop and implemented the M4
+model-contract boundary. The final M4 live cloud-model acceptance test remains
+explicitly opt-in. Noema is not yet an operating system image and must not be
+used to manage a host machine.
 
 The Rust workspace now contains a deterministic planner, transactional state
 core, virtual and real-process execution backends, and reconciler. Real
@@ -25,9 +27,15 @@ processes are exercised only inside the Docker laboratory or explicit tests:
 - Reconciliation: commit/rollback plus recovery after observed runtime drift.
 - Process execution: built-in Rust Workloads, HTTP health probes, SIGTERM, and reaping.
 - Persistence: validated generation and event snapshots with atomic replacement.
+- Contract: bounded, filtered model context plus a generated reply JSON Schema.
+- Protocol gateway: strict decoding, request/generation binding, and pure SIR validation.
+- Providers: deterministic mock plus an opt-in OpenAI Responses adapter with no tools.
 
-See [plan.md](plan.md), [the constitution](docs/constitution.md), and the
-[SIR v0 specification](specs/sir-v0.md).
+The core protocol has no network dependency by default. Enable the first cloud
+adapter explicitly with the `noema-protocol/openai` Cargo feature.
+
+See [plan.md](plan.md), [the constitution](docs/constitution.md), the
+[model contract](docs/model-contract.md), and the [SIR v0 specification](specs/sir-v0.md).
 
 ## Development
 
@@ -35,6 +43,7 @@ See [plan.md](plan.md), [the constitution](docs/constitution.md), and the
 cargo xtask check
 docker compose -f docker/compose.yaml up --build \
   --abort-on-container-exit --exit-code-from m3-scenario
+docker compose -f docker/compose.yaml run --build --rm m4-contract
 docker compose -f docker/compose.yaml down --volumes --remove-orphans
 ```
 

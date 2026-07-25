@@ -18,6 +18,21 @@ services:
     volumes:
       - noema-m3-state:/var/lib/noema
 
+  m4-contract:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.m4
+    image: noema-m4-contract:local
+    read_only: true
+    network_mode: none
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 32
+    tmpfs:
+      - /tmp:size=4m,mode=1777
+
 volumes:
   noema-m3-state:
     name: noema-m3-state

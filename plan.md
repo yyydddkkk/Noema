@@ -1,16 +1,18 @@
 # Noema Linux 初版开发计划
 
-状态：Draft 0.5（M3 完成）
+状态：Draft 0.6（M4 实现完成，真实云模型验收待显式启用）
 项目目录：`/home/yang/noema`
 暂定中文名：意态
 核心实现语言：Rust
 
-当前实现进度（2026-07-25）：M0 至 M3 已完成。除内存闭环外，现已有统一的
+当前实现进度（2026-07-25）：M0 至 M3 已完成，M4 的本地实现和离线协议验收
+已完成，最终真实云模型兼容性验收尚未执行。除内存闭环外，现已有统一的
 Executor backend 事务接口、真实 Rust 测试 Workload、Process backend、HTTP
 健康检查、SIGTERM 停止与进程回收、原子 generation/event JSON 快照，以及
 受限 Docker Compose 场景。容器内已验证启动、回滚、崩溃恢复和跨容器重启
-恢复；容器不访问 Docker socket、不访问外网，并以只读 rootfs 和非 root
-用户运行。
+恢复。M4 新增了有界 Noema Contract、Rust 类型生成的 reply schema、严格
+Gateway、确定性 mock provider 和默认不联网的 OpenAI Responses provider；
+离线容器不访问 Docker socket、不访问外网，并以只读 rootfs 和非 root 用户运行。
 
 ## 1. 项目定义
 
@@ -382,10 +384,11 @@ API key 不进入测试镜像，不写入日志，不提交到仓库。
 
 ### M4：Gateway 与模型契约
 
-- 定义 Noema Contract
-- 生成模型可读的 SIR schema
-- 实现 mock provider
-- 接入第一个可替换的云模型 provider
+- [x] 定义 Noema Contract
+- [x] 生成模型可读的 SIR schema
+- [x] 实现 mock provider
+- [x] 接入第一个可替换的云模型 provider
+- [ ] 使用显式提供的 API key 完成有预算限制的真实模型兼容性验收
 
 退出条件：未专门训练的云模型能根据 contract 提交合法 Workload SIR。
 
@@ -458,12 +461,11 @@ API key 不进入测试镜像，不写入日志，不提交到仓库。
 
 ## 13. 当前最近步骤
 
-1. 定义 Noema Contract：模型可见对象、可提交 Intent 和禁止字段。
-2. 从 Rust 类型生成版本化 JSON Schema，供未专门训练的模型读取。
-3. 实现确定性的 mock provider，不依赖真实云服务完成协议测试。
-4. 实现 gateway 的上下文筛选、大小限制和敏感字段拒绝。
-5. 定义可替换的云模型 provider trait，并接入第一个显式启用的 provider。
-6. 保持真实模型测试默认关闭，加入请求、token、费用和超时上限。
+1. 增加显式启用的真实模型兼容性场景，限制请求数、token、费用和总超时。
+2. 用真实云模型完成“根据 contract 创建测试 Workload”的 M4 退出验收。
+3. 固化通过验收的模型 snapshot 与 contract fixture，模型升级时重跑评估。
+4. 开始 M5：定义 initramfs 中 noemad、状态分区和 rescue 路径的最小边界。
+5. 构建第一个只运行 Simulation backend 的 QEMU 启动镜像。
 
 M4 只建立云模型契约，不让模型绕过 Intent SIR；在 M5 完成前不制作真实硬件
 安装镜像，在 M6 完成前不把开发版本作为宿主机 PID 1。
