@@ -1,13 +1,14 @@
 # Noema Linux 初版开发计划
 
-状态：Draft 0.2（M0 进行中）
+状态：Draft 0.3（M1 完成）
 项目目录：`/home/yang/noema`
 暂定中文名：意态
 核心实现语言：Rust
 
-当前实现进度（2026-07-25）：Rust workspace、项目宪法、SIR v0 规范、
-Intent/Execution/Evidence IR 类型、纯 Intent 验证器和首批边界测试已完成；
-M0 剩余项目是确定 CI 承载平台并建立对应流水线。
+当前实现进度（2026-07-25）：M0 与 M1 已完成。仓库已有统一的
+`cargo xtask check` 检查入口和 GitHub Actions；Intent/Execution/Evidence
+IR、纯 Intent 验证器、内存 generation store、隔离 candidate、
+commit/abort、Desired/Observed 分离和因果事件记录均已有测试覆盖。
 
 ## 1. 项目定义
 
