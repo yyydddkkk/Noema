@@ -10,12 +10,12 @@ generation or preserves the previous one.
 
 ## Status
 
-Noema has completed its M2 in-memory simulation loop. It is not yet an
+Noema has completed its M3 container-backed process loop. It is not yet an
 operating system image and must not be used to manage a host machine.
 
 The Rust workspace now contains a deterministic planner, transactional state
-core, virtual execution backend, and reconciler. Together they exercise these
-boundaries without spawning processes or changing the host:
+core, virtual and real-process execution backends, and reconciler. Real
+processes are exercised only inside the Docker laboratory or explicit tests:
 
 - Intent SIR: model-authored desired-state proposals.
 - Execution IR: locally-authored deterministic plans.
@@ -23,6 +23,8 @@ boundaries without spawning processes or changing the host:
 - State generations: isolated candidates with commit, abort, and causal events.
 - Simulation: virtual Workloads with crash, timeout, and health-failure injection.
 - Reconciliation: commit/rollback plus recovery after observed runtime drift.
+- Process execution: built-in Rust Workloads, HTTP health probes, SIGTERM, and reaping.
+- Persistence: validated generation and event snapshots with atomic replacement.
 
 See [plan.md](plan.md), [the constitution](docs/constitution.md), and the
 [SIR v0 specification](specs/sir-v0.md).
@@ -31,6 +33,9 @@ See [plan.md](plan.md), [the constitution](docs/constitution.md), and the
 
 ```bash
 cargo xtask check
+docker compose -f docker/compose.yaml up --build \
+  --abort-on-container-exit --exit-code-from m3-scenario
+docker compose -f docker/compose.yaml down --volumes --remove-orphans
 ```
 
 Docker is the daily integration environment. QEMU is reserved for behavior

@@ -1,0 +1,16 @@
+[package]
+name = "noema-test-workload"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+signal-hook.workspace = true
+
+[dev-dependencies]
+noema-executor.workspace = true
+noema-ir.workspace = true
+noema-reconciler = { path = "../../crates/noema-reconciler" }
+
+[lints]
+workspace = true

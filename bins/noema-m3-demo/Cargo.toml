@@ -1,12 +1,14 @@
 [package]
-name = "noema-executor"
+name = "noema-m3-demo"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+noema-executor.workspace = true
 noema-ir.workspace = true
-nix.workspace = true
+noema-reconciler.workspace = true
+noema-state.workspace = true
 
 [lints]
 workspace = true

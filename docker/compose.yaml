@@ -1,0 +1,23 @@
+services:
+  m3-scenario:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.m3
+    image: noema-m3-scenario:local
+    read_only: true
+    network_mode: none
+    init: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    tmpfs:
+      - /run:size=1m,mode=0755
+      - /tmp:size=16m,mode=1777
+    volumes:
+      - noema-m3-state:/var/lib/noema
+
+volumes:
+  noema-m3-state:
+    name: noema-m3-state

@@ -2,7 +2,7 @@
 
 use std::{error::Error, fmt};
 
-use noema_executor::{ExecutionFailure, SimulationBackend};
+use noema_executor::{ExecutionBackend, ExecutionFailure, SimulationBackend};
 use noema_ir::{
     EvidenceIr, ExecutionAction, ExecutionIr, GenerationId, IntentSir, InvariantCheck,
     InvariantResult, Mutation, ObjectRef, Observation, ObservationSource, ObservedWorkloadState,
@@ -30,7 +30,7 @@ pub struct TransactionOutcome {
 pub enum ReconcileError {
     Plan(PlanError),
     State(StateError),
-    InvalidPlan(String),
+    Execution(ExecutionFailure),
 }
 
 impl fmt::Display for ReconcileError {
@@ -38,7 +38,7 @@ impl fmt::Display for ReconcileError {
         match self {
             Self::Plan(error) => error.fmt(formatter),
             Self::State(error) => error.fmt(formatter),
-            Self::InvalidPlan(message) => write!(formatter, "invalid execution plan: {message}"),
+            Self::Execution(error) => error.fmt(formatter),
         }
     }
 }
@@ -48,7 +48,7 @@ impl Error for ReconcileError {
         match self {
             Self::Plan(error) => Some(error),
             Self::State(error) => Some(error),
-            Self::InvalidPlan(_) => None,
+            Self::Execution(error) => Some(error),
         }
     }
 }
@@ -65,19 +65,37 @@ impl From<StateError> for ReconcileError {
     }
 }
 
+impl From<ExecutionFailure> for ReconcileError {
+    fn from(error: ExecutionFailure) -> Self {
+        Self::Execution(error)
+    }
+}
+
 /// Owns committed state and the matching committed execution backend.
-pub struct Reconciler {
+pub struct Reconciler<B = SimulationBackend> {
     store: MemoryGenerationStore,
-    backend: SimulationBackend,
+    backend: B,
     next_reconcile_transaction: u64,
 }
 
-impl Reconciler {
+impl Reconciler<SimulationBackend> {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_backend(SimulationBackend::default())
+    }
+}
+
+impl<B: ExecutionBackend> Reconciler<B> {
+    #[must_use]
+    pub fn with_backend(backend: B) -> Self {
+        Self::with_store(backend, MemoryGenerationStore::new())
+    }
+
+    #[must_use]
+    pub fn with_store(backend: B, store: MemoryGenerationStore) -> Self {
         Self {
-            store: MemoryGenerationStore::new(),
-            backend: SimulationBackend::default(),
+            store,
+            backend,
             next_reconcile_transaction: 1,
         }
     }
@@ -88,11 +106,11 @@ impl Reconciler {
     }
 
     #[must_use]
-    pub const fn backend(&self) -> &SimulationBackend {
+    pub const fn backend(&self) -> &B {
         &self.backend
     }
 
-    pub const fn backend_mut(&mut self) -> &mut SimulationBackend {
+    pub const fn backend_mut(&mut self) -> &mut B {
         &mut self.backend
     }
 
@@ -117,10 +135,17 @@ impl Reconciler {
         let mut evidence = EvidenceBuilder::new(execution.transaction_id.clone(), old_generation);
         add_preflight_invariants(&mut evidence, &execution, self.store.current());
 
-        let mut candidate = self
+        self.backend.begin_transaction()?;
+        let mut candidate = match self
             .store
-            .begin(execution.transaction_id.clone(), execution.base_generation)?;
-        let mut candidate_backend = self.backend.clone();
+            .begin(execution.transaction_id.clone(), execution.base_generation)
+        {
+            Ok(candidate) => candidate,
+            Err(error) => {
+                self.backend.rollback_transaction()?;
+                return Err(error.into());
+            }
+        };
         let mut failure = None;
 
         for step in &execution.steps {
@@ -130,7 +155,7 @@ impl Reconciler {
             if let Err(error) = execute_action(
                 &step.action,
                 &mut candidate,
-                &mut candidate_backend,
+                &mut self.backend,
                 &mut evidence,
             ) {
                 failure = Some(error);
@@ -144,7 +169,9 @@ impl Reconciler {
                 true,
                 Some(format!("generation {old_generation} retained: {message}")),
             );
+            let rollback = self.backend.rollback_transaction();
             self.store.abort(candidate);
+            rollback?;
             return Ok(TransactionOutcome {
                 plan: execution,
                 evidence: evidence.finish(None),
@@ -152,14 +179,14 @@ impl Reconciler {
             });
         }
 
-        let candidate_id = candidate.id();
-        let committed = self.store.commit(candidate)?;
-        if committed != candidate_id {
-            return Err(ReconcileError::InvalidPlan(format!(
-                "committed generation {committed} differs from candidate {candidate_id}"
-            )));
-        }
-        self.backend = candidate_backend;
+        let committed = match self.store.commit(candidate) {
+            Ok(generation) => generation,
+            Err(error) => {
+                self.backend.rollback_transaction()?;
+                return Err(error.into());
+            }
+        };
+        self.backend.commit_transaction()?;
         evidence.change(StateChange::GenerationCommitted {
             from: old_generation,
             to: committed,
@@ -185,18 +212,7 @@ impl Reconciler {
     ///
     /// Returns an error if generation state cannot be updated consistently.
     pub fn reconcile_once(&mut self) -> Result<Option<EvidenceIr>, ReconcileError> {
-        let drift = self
-            .store
-            .current()
-            .workloads()
-            .iter()
-            .find_map(|(id, workload)| {
-                let runtime_observed = self.backend.observed(id);
-                let restartable = should_restart(workload, runtime_observed);
-                (runtime_observed != workload.observed() || restartable)
-                    .then(|| (id.clone(), workload.clone(), runtime_observed))
-            });
-        let Some((workload_id, workload, runtime_observed)) = drift else {
+        let Some((workload_id, workload, runtime_observed)) = self.find_drift()? else {
             return Ok(None);
         };
 
@@ -207,84 +223,65 @@ impl Reconciler {
         ));
         self.next_reconcile_transaction += 1;
         let mut evidence = EvidenceBuilder::new(transaction_id.clone(), old_generation);
-        let mut candidate = self.store.begin(transaction_id, old_generation)?;
-        record_observation(
+        self.backend.begin_transaction()?;
+        let mut candidate = match self.store.begin(transaction_id, old_generation) {
+            Ok(candidate) => candidate,
+            Err(error) => {
+                self.backend.rollback_transaction()?;
+                return Err(error.into());
+            }
+        };
+        if let Err(error) = recover_workload(
+            &mut self.backend,
             &mut candidate,
             &mut evidence,
             &workload_id,
+            &workload,
             runtime_observed,
-            ObservationSource::ProcessMonitor,
-        )?;
-
-        if should_restart(&workload, runtime_observed) {
-            if runtime_observed == ObservedWorkloadState::Absent {
-                self.backend
-                    .resolve(workload.artifact())
-                    .map_err(|error| execution_as_invalid_plan(&error))?;
-                self.backend
-                    .prepare(&workload_id, workload.artifact(), workload.health())
-                    .map_err(|error| execution_as_invalid_plan(&error))?;
-            }
-            match self.backend.start(&workload_id) {
-                Ok(observed) => {
-                    record_observation(
-                        &mut candidate,
-                        &mut evidence,
-                        &workload_id,
-                        observed,
-                        ObservationSource::Recovery,
-                    )?;
-                    if !matches!(workload.health(), noema_ir::HealthSpec::None) {
-                        let healthy = self.backend.check_health(&workload_id);
-                        evidence.invariant(
-                            InvariantCheck::WorkloadHealthy {
-                                workload: workload_id.clone(),
-                            },
-                            healthy,
-                            Some(if healthy {
-                                "recovered workload passed its health check".to_owned()
-                            } else {
-                                "recovered workload failed its health check".to_owned()
-                            }),
-                        );
-                        if !healthy {
-                            self.backend
-                                .mark_failed(&workload_id)
-                                .map_err(|error| execution_as_invalid_plan(&error))?;
-                            record_observation(
-                                &mut candidate,
-                                &mut evidence,
-                                &workload_id,
-                                ObservedWorkloadState::Failed,
-                                ObservationSource::HealthProbe,
-                            )?;
-                        }
-                    }
-                }
-                Err(error) => {
-                    if let Some(observed) = error.observation() {
-                        record_observation(
-                            &mut candidate,
-                            &mut evidence,
-                            &workload_id,
-                            observed,
-                            ObservationSource::Recovery,
-                        )?;
-                    }
-                }
-            }
+        ) {
+            let rollback = self.backend.rollback_transaction();
+            self.store.abort(candidate);
+            rollback?;
+            return Err(error);
         }
 
-        let committed = self.store.commit(candidate)?;
+        let committed = match self.store.commit(candidate) {
+            Ok(generation) => generation,
+            Err(error) => {
+                self.backend.rollback_transaction()?;
+                return Err(error.into());
+            }
+        };
+        self.backend.commit_transaction()?;
         evidence.change(StateChange::GenerationCommitted {
             from: old_generation,
             to: committed,
         });
         Ok(Some(evidence.finish(Some(committed))))
     }
+
+    fn find_drift(
+        &mut self,
+    ) -> Result<Option<(WorkloadId, noema_state::Workload, ObservedWorkloadState)>, ReconcileError>
+    {
+        let workloads: Vec<_> = self
+            .store
+            .current()
+            .workloads()
+            .iter()
+            .map(|(id, workload)| (id.clone(), workload.clone()))
+            .collect();
+        for (id, workload) in workloads {
+            let observed = self.backend.observed(&id)?;
+            if observed != workload.observed() || should_restart(&workload, observed) {
+                return Ok(Some((id, workload, observed)));
+            }
+        }
+        Ok(None)
+    }
 }
 
-impl Default for Reconciler {
+impl Default for Reconciler<SimulationBackend> {
     fn default() -> Self {
         Self::new()
     }
@@ -294,9 +291,84 @@ fn should_restart(workload: &noema_state::Workload, observed: ObservedWorkloadSt
     workload.desired() == noema_ir::DesiredWorkloadState::Running
         && match workload.restart_policy() {
             RestartPolicy::Never => false,
-            RestartPolicy::OnFailure => observed == ObservedWorkloadState::Failed,
+            RestartPolicy::OnFailure => matches!(
+                observed,
+                ObservedWorkloadState::Absent | ObservedWorkloadState::Failed
+            ),
             RestartPolicy::Always => observed != ObservedWorkloadState::Running,
         }
+}
+
+fn recover_workload<B: ExecutionBackend>(
+    backend: &mut B,
+    candidate: &mut CandidateGeneration,
+    evidence: &mut EvidenceBuilder,
+    workload_id: &WorkloadId,
+    workload: &noema_state::Workload,
+    runtime_observed: ObservedWorkloadState,
+) -> Result<(), ReconcileError> {
+    record_observation(
+        candidate,
+        evidence,
+        workload_id,
+        runtime_observed,
+        ObservationSource::ProcessMonitor,
+    )?;
+    if !should_restart(workload, runtime_observed) {
+        return Ok(());
+    }
+    if runtime_observed == ObservedWorkloadState::Absent {
+        backend.resolve(workload.artifact())?;
+        backend.prepare(workload_id, workload.artifact(), workload.health())?;
+    }
+    let observed = match backend.start(workload_id) {
+        Ok(observed) => observed,
+        Err(error) => {
+            if let Some(observed) = error.observation() {
+                record_observation(
+                    candidate,
+                    evidence,
+                    workload_id,
+                    observed,
+                    ObservationSource::Recovery,
+                )?;
+            }
+            return Ok(());
+        }
+    };
+    record_observation(
+        candidate,
+        evidence,
+        workload_id,
+        observed,
+        ObservationSource::Recovery,
+    )?;
+    if matches!(workload.health(), noema_ir::HealthSpec::None) {
+        return Ok(());
+    }
+    let healthy = backend.check_health(workload_id)?;
+    evidence.invariant(
+        InvariantCheck::WorkloadHealthy {
+            workload: workload_id.clone(),
+        },
+        healthy,
+        Some(if healthy {
+            "recovered workload passed its health check".to_owned()
+        } else {
+            "recovered workload failed its health check".to_owned()
+        }),
+    );
+    if !healthy {
+        backend.mark_failed(workload_id)?;
+        record_observation(
+            candidate,
+            evidence,
+            workload_id,
+            ObservedWorkloadState::Failed,
+            ObservationSource::HealthProbe,
+        )?;
+    }
+    Ok(())
 }
 
 fn add_preflight_invariants(
@@ -323,10 +395,10 @@ fn add_preflight_invariants(
     }
 }
 
-fn execute_action(
+fn execute_action<B: ExecutionBackend>(
     action: &ExecutionAction,
     candidate: &mut CandidateGeneration,
-    backend: &mut SimulationBackend,
+    backend: &mut B,
     evidence: &mut EvidenceBuilder,
 ) -> Result<(), String> {
     match action {
@@ -348,7 +420,7 @@ fn execute_action(
                     artifact: artifact.clone(),
                 },
                 true,
-                Some("simulation backend resolved built-in artifact".to_owned()),
+                Some(format!("{} backend resolved artifact", backend.name())),
             );
         }
         ExecutionAction::ApplyMutation { mutation } => {
@@ -364,7 +436,7 @@ fn execute_action(
             start_workload(candidate, backend, evidence, workload)?;
         }
         ExecutionAction::StopWorkload { workload } => {
-            let observed = backend.stop(workload);
+            let observed = backend.stop(workload).map_err(|error| error.to_string())?;
             record_executor_observation(candidate, evidence, workload, observed)?;
         }
         ExecutionAction::RemoveWorkload { workload } => {
@@ -380,9 +452,9 @@ fn execute_action(
     Ok(())
 }
 
-fn prepare_workload(
+fn prepare_workload<B: ExecutionBackend>(
     candidate: &mut CandidateGeneration,
-    backend: &mut SimulationBackend,
+    backend: &mut B,
     evidence: &mut EvidenceBuilder,
     workload: &WorkloadId,
 ) -> Result<(), String> {
@@ -398,9 +470,9 @@ fn prepare_workload(
     record_executor_observation(candidate, evidence, workload, observed)
 }
 
-fn start_workload(
+fn start_workload<B: ExecutionBackend>(
     candidate: &mut CandidateGeneration,
-    backend: &mut SimulationBackend,
+    backend: &mut B,
     evidence: &mut EvidenceBuilder,
     workload: &WorkloadId,
 ) -> Result<(), String> {
@@ -422,25 +494,29 @@ fn start_workload(
     }
 }
 
-fn remove_workload(
+fn remove_workload<B: ExecutionBackend>(
     candidate: &mut CandidateGeneration,
-    backend: &mut SimulationBackend,
+    backend: &mut B,
     evidence: &mut EvidenceBuilder,
     workload: &WorkloadId,
 ) -> Result<(), String> {
-    let observed = backend.remove(workload);
+    let observed = backend
+        .remove(workload)
+        .map_err(|error| error.to_string())?;
     record_executor_observation(candidate, evidence, workload, observed)?;
     candidate
         .purge_workload(workload)
         .map_err(|error| error.to_string())
 }
 
-fn check_health(
-    backend: &SimulationBackend,
+fn check_health<B: ExecutionBackend>(
+    backend: &mut B,
     evidence: &mut EvidenceBuilder,
     workload: &WorkloadId,
 ) -> Result<(), String> {
-    let healthy = backend.check_health(workload);
+    let healthy = backend
+        .check_health(workload)
+        .map_err(|error| error.to_string())?;
     evidence.invariant(
         InvariantCheck::WorkloadHealthy {
             workload: workload.clone(),
@@ -534,10 +610,6 @@ fn record_observation(
         });
     }
     Ok(())
-}
-
-fn execution_as_invalid_plan(error: &ExecutionFailure) -> ReconcileError {
-    ReconcileError::InvalidPlan(error.to_string())
 }
 
 struct EvidenceBuilder {

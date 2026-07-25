@@ -9,7 +9,7 @@ mod event;
 mod model;
 mod store;
 
-pub use error::StateError;
+pub use error::{PersistenceError, StateError};
 pub use event::{StateEvent, StateEventKind};
 pub use model::{Workload, WorldState};
 pub use store::{CandidateGeneration, GenerationStore, MemoryGenerationStore};

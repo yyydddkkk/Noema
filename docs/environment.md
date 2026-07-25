@@ -93,7 +93,8 @@ cargo clippy -- -D warnings
 
 ## 仓库状态
 
-`/home/yang/noema` 当前尚未初始化为 Git 仓库，也不处于可识别的父 Git worktree 中。初始化 Git 和 Rust workspace 留给项目 M0 阶段完成。
+`/home/yang/noema` 已初始化为 Git 仓库和 Rust workspace，远程仓库为
+`yyydddkkk/Noema`。M0 至 M3 的开发均使用独立 `agent/*` 分支和 GitHub PR。
 
 ## 未安装
 
@@ -109,8 +110,7 @@ cargo clippy -- -D warnings
 
 ## 剩余人工事项
 
-1. 退出并重新登录一次，使 `docker` 组在普通终端中生效。
-2. 项目正式使用云模型前，以独立 secret 管理方式配置 API key；不要写入仓库。
-3. 进入 M0 后再初始化 Git 仓库和 Rust workspace。
+1. 项目正式使用云模型前，以独立 secret 管理方式配置 API key；不要写入仓库。
+2. Docker 场景结束后，只使用仓库提供的 Compose project 清理其命名资源。
 
 开发环境已经满足 Noema M0-M5 的基础编译、Docker 测试和 QEMU/KVM 测试需求。

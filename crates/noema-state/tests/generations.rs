@@ -296,3 +296,40 @@ fn world_state_round_trips_without_mutable_access() {
         serde_json::from_str(&json).expect("deserialize world state");
     assert_eq!(decoded, state);
 }
+
+#[test]
+fn persisted_store_retains_generations_events_and_allocator_positions() {
+    let path = std::env::temp_dir().join(format!(
+        "noema-state-persistence-{}.json",
+        std::process::id()
+    ));
+    let mut store = MemoryGenerationStore::new();
+    let mut first = store
+        .begin(transaction("tx-persist-1"), GenerationId::INITIAL)
+        .expect("begin first candidate");
+    first
+        .apply_mutation(&create_workload("hello"))
+        .expect("create persisted workload");
+    store.commit(first).expect("commit first generation");
+    store.save(&path).expect("save generation store");
+
+    let mut restored = MemoryGenerationStore::load(&path).expect("load generation store");
+    assert_eq!(restored.current(), store.current());
+    assert_eq!(restored.events(), store.events());
+    let mut second = restored
+        .begin(transaction("tx-persist-2"), GenerationId(1))
+        .expect("allocator position must be restored");
+    second
+        .apply_mutation(&Mutation::SetDesiredState {
+            workload: WorkloadId::from("hello"),
+            state: DesiredWorkloadState::Stopped,
+        })
+        .expect("change restored workload");
+    assert_eq!(
+        restored.commit(second).expect("commit restored store"),
+        GenerationId(2)
+    );
+    assert_eq!(restored.events().last().expect("event").sequence(), 6);
+
+    std::fs::remove_file(path).expect("remove test snapshot");
+}
