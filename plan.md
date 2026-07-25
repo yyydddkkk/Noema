@@ -1,14 +1,15 @@
 # Noema Linux 初版开发计划
 
-状态：Draft 0.3（M1 完成）
+状态：Draft 0.4（M2 完成）
 项目目录：`/home/yang/noema`
 暂定中文名：意态
 核心实现语言：Rust
 
-当前实现进度（2026-07-25）：M0 与 M1 已完成。仓库已有统一的
-`cargo xtask check` 检查入口和 GitHub Actions；Intent/Execution/Evidence
-IR、纯 Intent 验证器、内存 generation store、隔离 candidate、
-commit/abort、Desired/Observed 分离和因果事件记录均已有测试覆盖。
+当前实现进度（2026-07-25）：M0、M1 与 M2 已完成。仓库已有统一的
+`cargo xtask check` 检查入口和 GitHub Actions；除 IR、验证器和 generation
+store 外，现已实现纯确定性 Planner、虚拟 Workload、候选运行时快照、
+故障注入、Reconciler 和 Evidence IR 生成。正常启动、启动崩溃、启动超时、
+健康失败、stale generation、rollback、删除与崩溃恢复均有内存场景测试。
 
 ## 1. 项目定义
 
@@ -456,12 +457,12 @@ API key 不进入测试镜像，不写入日志，不提交到仓库。
 
 ## 13. 当前最近步骤
 
-1. 准备 Rust、Docker、Docker Compose 和 QEMU 开发环境。
-2. 初始化 Git 仓库和 Rust workspace。
-3. 编写 `docs/constitution.md`。
-4. 将 Intent SIR、Execution IR 和 Evidence IR 编译为最小 Rust 类型。
-5. 编写第一个非法 SIR 零副作用测试。
-6. 实现内存 generation store。
-7. 实现第一个 Simulation backend 场景。
+1. 定义 Executor backend trait，使 Simulation 与未来 Container backend
+   共用相同的结构化执行边界。
+2. 编写 Noema 自带的 Rust 测试 Workload。
+3. 在 Docker 中运行真实子进程，但不挂载 Docker socket 或宿主系统目录。
+4. 实现进程启动、停止、健康检查和退出观察。
+5. 将内存 generation 与事件保存到明确命名的测试 volume。
+6. 让 M2 的相同场景通过 Container backend，完成 M3。
 
 在 M2 完成前，不接入真实云模型；在 M3 完成前，不尝试让 noemad 成为 PID 1；在 M5 完成前，不制作真实硬件安装镜像。

@@ -1,6 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["crates/noema-ir", "crates/noema-state", "xtask"]
+members = [
+    "crates/noema-executor",
+    "crates/noema-ir",
+    "crates/noema-planner",
+    "crates/noema-reconciler",
+    "crates/noema-state",
+    "xtask",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -8,6 +15,10 @@ edition = "2024"
 rust-version = "1.97.1"
 
 [workspace.dependencies]
+noema-executor = { path = "crates/noema-executor" }
+noema-ir = { path = "crates/noema-ir" }
+noema-planner = { path = "crates/noema-planner" }
+noema-state = { path = "crates/noema-state" }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
