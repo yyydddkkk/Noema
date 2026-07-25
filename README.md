@@ -10,16 +10,19 @@ generation or preserves the previous one.
 
 ## Status
 
-Noema has completed its M1 in-memory state core. It is not yet an operating
-system image and must not be used to manage a host machine.
+Noema has completed its M2 in-memory simulation loop. It is not yet an
+operating system image and must not be used to manage a host machine.
 
-The current executable artifact is the `noema-ir` library, which defines and
-validates the three protocol boundaries:
+The Rust workspace now contains a deterministic planner, transactional state
+core, virtual execution backend, and reconciler. Together they exercise these
+boundaries without spawning processes or changing the host:
 
 - Intent SIR: model-authored desired-state proposals.
 - Execution IR: locally-authored deterministic plans.
 - Evidence IR: locally-authored observations and outcomes.
 - State generations: isolated candidates with commit, abort, and causal events.
+- Simulation: virtual Workloads with crash, timeout, and health-failure injection.
+- Reconciliation: commit/rollback plus recovery after observed runtime drift.
 
 See [plan.md](plan.md), [the constitution](docs/constitution.md), and the
 [SIR v0 specification](specs/sir-v0.md).

@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{ArtifactRef, GenerationId, StepId, TransactionId, WorkloadId};
+use crate::{ArtifactRef, GenerationId, Mutation, StepId, TransactionId, WorkloadId};
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -25,14 +25,15 @@ pub struct ExecutionStep {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExecutionAction {
     ResolveArtifact { artifact: ArtifactRef },
-    CreateCandidateGeneration { generation: GenerationId },
+    CreateCandidateGeneration,
+    ApplyMutation { mutation: Mutation },
     PrepareWorkload { workload: WorkloadId },
     StartWorkload { workload: WorkloadId },
     StopWorkload { workload: WorkloadId },
     RemoveWorkload { workload: WorkloadId },
     CheckHealth { workload: WorkloadId },
-    CommitGeneration { generation: GenerationId },
-    AbandonGeneration { generation: GenerationId },
+    CommitGeneration,
+    AbandonGeneration,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
