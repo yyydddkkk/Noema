@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = [
+    "bins/noema-m3-demo",
+    "bins/noema-test-workload",
     "crates/noema-executor",
     "crates/noema-ir",
     "crates/noema-planner",
@@ -18,10 +20,13 @@ rust-version = "1.97.1"
 noema-executor = { path = "crates/noema-executor" }
 noema-ir = { path = "crates/noema-ir" }
 noema-planner = { path = "crates/noema-planner" }
+noema-reconciler = { path = "crates/noema-reconciler" }
 noema-state = { path = "crates/noema-state" }
+nix = { version = "0.30", features = ["signal"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+signal-hook = "0.3"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

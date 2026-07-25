@@ -1,8 +1,17 @@
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::Path,
+};
+
 use noema_ir::{
     DesiredWorkloadState, GenerationId, Mutation, ObservedWorkloadState, TransactionId, WorkloadId,
 };
+use serde::{Deserialize, Serialize};
 
-use crate::{StateError, StateEvent, StateEventKind, Workload, WorldState};
+use crate::{PersistenceError, StateError, StateEvent, StateEventKind, Workload, WorldState};
+
+const SNAPSHOT_VERSION: u16 = 1;
 
 pub trait GenerationStore {
     fn current(&self) -> &WorldState;
@@ -188,7 +197,10 @@ impl CandidateGeneration {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct MemoryGenerationStore {
+    snapshot_version: u16,
     current: WorldState,
     next_generation: u64,
     next_event_sequence: u64,
@@ -199,11 +211,73 @@ impl MemoryGenerationStore {
     #[must_use]
     pub fn new() -> Self {
         Self {
+            snapshot_version: SNAPSHOT_VERSION,
             current: WorldState::initial(),
             next_generation: 1,
             next_event_sequence: 1,
             events: Vec::new(),
         }
+    }
+
+    /// Atomically saves current state, allocator positions, and causal events.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O or serialization error. The destination is replaced only
+    /// after the complete temporary snapshot has been flushed to disk.
+    pub fn save(&self, path: &Path) -> Result<(), PersistenceError> {
+        let bytes = serde_json::to_vec_pretty(self)?;
+        let temporary = path.with_extension("tmp");
+        let mut file = File::create(&temporary)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        fs::rename(temporary, path)?;
+        Ok(())
+    }
+
+    /// Loads and validates a persisted generation store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for unreadable JSON or allocator/event invariants that
+    /// could cause generation or sequence identifiers to be reused.
+    pub fn load(path: &Path) -> Result<Self, PersistenceError> {
+        let bytes = fs::read(path)?;
+        let store: Self = serde_json::from_slice(&bytes)?;
+        store.validate_snapshot()?;
+        Ok(store)
+    }
+
+    fn validate_snapshot(&self) -> Result<(), PersistenceError> {
+        if self.snapshot_version != SNAPSHOT_VERSION {
+            return Err(PersistenceError::InvalidSnapshot(format!(
+                "snapshot version {} is unsupported; expected {SNAPSHOT_VERSION}",
+                self.snapshot_version
+            )));
+        }
+        if self.next_generation <= self.current.generation().0 {
+            return Err(PersistenceError::InvalidSnapshot(format!(
+                "next generation {} is not newer than current {}",
+                self.next_generation,
+                self.current.generation()
+            )));
+        }
+        let mut previous_sequence = 0;
+        for event in &self.events {
+            if event.sequence() <= previous_sequence {
+                return Err(PersistenceError::InvalidSnapshot(
+                    "event sequences are not strictly increasing".to_owned(),
+                ));
+            }
+            previous_sequence = event.sequence();
+        }
+        if self.next_event_sequence <= previous_sequence {
+            return Err(PersistenceError::InvalidSnapshot(format!(
+                "next event sequence {} is not newer than recorded sequence {previous_sequence}",
+                self.next_event_sequence
+            )));
+        }
+        Ok(())
     }
 
     fn append_event(

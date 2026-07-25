@@ -1,15 +1,16 @@
 # Noema Linux 初版开发计划
 
-状态：Draft 0.4（M2 完成）
+状态：Draft 0.5（M3 完成）
 项目目录：`/home/yang/noema`
 暂定中文名：意态
 核心实现语言：Rust
 
-当前实现进度（2026-07-25）：M0、M1 与 M2 已完成。仓库已有统一的
-`cargo xtask check` 检查入口和 GitHub Actions；除 IR、验证器和 generation
-store 外，现已实现纯确定性 Planner、虚拟 Workload、候选运行时快照、
-故障注入、Reconciler 和 Evidence IR 生成。正常启动、启动崩溃、启动超时、
-健康失败、stale generation、rollback、删除与崩溃恢复均有内存场景测试。
+当前实现进度（2026-07-25）：M0 至 M3 已完成。除内存闭环外，现已有统一的
+Executor backend 事务接口、真实 Rust 测试 Workload、Process backend、HTTP
+健康检查、SIGTERM 停止与进程回收、原子 generation/event JSON 快照，以及
+受限 Docker Compose 场景。容器内已验证启动、回滚、崩溃恢复和跨容器重启
+恢复；容器不访问 Docker socket、不访问外网，并以只读 rootfs 和非 root
+用户运行。
 
 ## 1. 项目定义
 
@@ -444,7 +445,7 @@ API key 不进入测试镜像，不写入日志，不提交到仓库。
 
 以下问题在相应里程碑前通过原型和测试决定，不提前锁死：
 
-- 状态存储使用 SQLite、纯 Rust 数据库还是自定义 append-only store
+- M3 的原子 JSON 快照何时迁移为 SQLite、纯 Rust 数据库或 append-only store
 - 内部协议使用 JSON、CBOR、Protobuf 或其他编码
 - Workload 最终采用进程、namespace、OCI artifact 还是 microVM
 - generation 覆盖哪些本地持久状态
@@ -457,12 +458,12 @@ API key 不进入测试镜像，不写入日志，不提交到仓库。
 
 ## 13. 当前最近步骤
 
-1. 定义 Executor backend trait，使 Simulation 与未来 Container backend
-   共用相同的结构化执行边界。
-2. 编写 Noema 自带的 Rust 测试 Workload。
-3. 在 Docker 中运行真实子进程，但不挂载 Docker socket 或宿主系统目录。
-4. 实现进程启动、停止、健康检查和退出观察。
-5. 将内存 generation 与事件保存到明确命名的测试 volume。
-6. 让 M2 的相同场景通过 Container backend，完成 M3。
+1. 定义 Noema Contract：模型可见对象、可提交 Intent 和禁止字段。
+2. 从 Rust 类型生成版本化 JSON Schema，供未专门训练的模型读取。
+3. 实现确定性的 mock provider，不依赖真实云服务完成协议测试。
+4. 实现 gateway 的上下文筛选、大小限制和敏感字段拒绝。
+5. 定义可替换的云模型 provider trait，并接入第一个显式启用的 provider。
+6. 保持真实模型测试默认关闭，加入请求、token、费用和超时上限。
 
-在 M2 完成前，不接入真实云模型；在 M3 完成前，不尝试让 noemad 成为 PID 1；在 M5 完成前，不制作真实硬件安装镜像。
+M4 只建立云模型契约，不让模型绕过 Intent SIR；在 M5 完成前不制作真实硬件
+安装镜像，在 M6 完成前不把开发版本作为宿主机 PID 1。

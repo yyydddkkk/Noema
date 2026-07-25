@@ -62,3 +62,44 @@ impl fmt::Display for StateError {
 }
 
 impl Error for StateError {}
+
+#[derive(Debug)]
+pub enum PersistenceError {
+    Io(std::io::Error),
+    Json(serde_json::Error),
+    InvalidSnapshot(String),
+}
+
+impl fmt::Display for PersistenceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(error) => write!(formatter, "state snapshot I/O failed: {error}"),
+            Self::Json(error) => write!(formatter, "state snapshot JSON is invalid: {error}"),
+            Self::InvalidSnapshot(message) => {
+                write!(formatter, "state snapshot invariants failed: {message}")
+            }
+        }
+    }
+}
+
+impl Error for PersistenceError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            Self::Json(error) => Some(error),
+            Self::InvalidSnapshot(_) => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for PersistenceError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl From<serde_json::Error> for PersistenceError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::Json(error)
+    }
+}
