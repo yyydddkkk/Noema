@@ -1,5 +1,7 @@
 #![cfg(feature = "openai")]
 
+use std::time::Duration;
+
 use noema_contract::ContractBuilder;
 use noema_protocol::{Gateway, GatewayError, OpenAiProvider, OpenAiTransport, ProviderError};
 use noema_state::{GenerationStore, MemoryGenerationStore};
@@ -130,4 +132,12 @@ fn credentials_and_model_identifiers_are_validated_locally() {
         response: Vec::new(),
     };
     assert!(OpenAiProvider::with_transport("test-key", "bad/model", 100, transport).is_err());
+}
+
+#[test]
+fn real_transport_limits_are_validated_without_a_network_call() {
+    assert!(OpenAiProvider::with_limits("test-key", "gpt-5.6", 1, Duration::ZERO).is_err());
+    assert!(
+        OpenAiProvider::with_limits("test-key", "gpt-5.6", 1, Duration::from_secs(301)).is_err()
+    );
 }

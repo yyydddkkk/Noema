@@ -461,11 +461,11 @@ API key 不进入测试镜像，不写入日志，不提交到仓库。
 
 ## 13. 当前最近步骤
 
-1. 增加显式启用的真实模型兼容性场景，限制请求数、token、费用和总超时。
-2. 用真实云模型完成“根据 contract 创建测试 Workload”的 M4 退出验收。
-3. 固化通过验收的模型 snapshot 与 contract fixture，模型升级时重跑评估。
-4. 开始 M5：定义 initramfs 中 noemad、状态分区和 rescue 路径的最小边界。
-5. 构建第一个只运行 Simulation backend 的 QEMU 启动镜像。
+1. [x] 增加显式启用的真实模型兼容性场景，限制请求数、token、费用和总超时。
+2. [ ] 用真实云模型完成“根据 contract 创建测试 Workload”的 M4 退出验收。
+3. [ ] 固化通过验收的模型 snapshot 与 contract fixture，模型升级时重跑评估。
+4. [ ] 开始 M5：定义 initramfs 中 noemad、状态分区和 rescue 路径的最小边界。
+5. [ ] 构建第一个只运行 Simulation backend 的 QEMU 启动镜像。
 
 M4 只建立云模型契约，不让模型绕过 Intent SIR；在 M5 完成前不制作真实硬件
 安装镜像，在 M6 完成前不把开发版本作为宿主机 PID 1。
