@@ -2,10 +2,13 @@
 resolver = "3"
 members = [
     "bins/noema-m3-demo",
+    "bins/noema-m4-demo",
     "bins/noema-test-workload",
+    "crates/noema-contract",
     "crates/noema-executor",
     "crates/noema-ir",
     "crates/noema-planner",
+    "crates/noema-protocol",
     "crates/noema-reconciler",
     "crates/noema-state",
     "xtask",
@@ -17,12 +20,15 @@ edition = "2024"
 rust-version = "1.97.1"
 
 [workspace.dependencies]
+noema-contract = { path = "crates/noema-contract" }
 noema-executor = { path = "crates/noema-executor" }
 noema-ir = { path = "crates/noema-ir" }
 noema-planner = { path = "crates/noema-planner" }
+noema-protocol = { path = "crates/noema-protocol" }
 noema-reconciler = { path = "crates/noema-reconciler" }
 noema-state = { path = "crates/noema-state" }
 nix = { version = "0.30", features = ["signal"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
