@@ -41,6 +41,7 @@ impl ReqwestOpenAiTransport {
     pub fn new(timeout: Duration) -> Result<Self, ProviderError> {
         let client = reqwest::blocking::Client::builder()
             .timeout(timeout)
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent(concat!("noema/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|error| {
@@ -116,8 +117,31 @@ impl OpenAiProvider<ReqwestOpenAiTransport> {
         api_key: impl Into<String>,
         model: impl Into<String>,
     ) -> Result<Self, ProviderError> {
-        let transport = ReqwestOpenAiTransport::new(Duration::from_secs(30))?;
-        Self::with_transport(api_key, model, DEFAULT_MAX_OUTPUT_TOKENS, transport)
+        Self::with_limits(
+            api_key,
+            model,
+            DEFAULT_MAX_OUTPUT_TOKENS,
+            Duration::from_secs(30),
+        )
+    }
+
+    /// Creates an official-endpoint provider with explicit output and timeout
+    /// limits. Merely constructing it performs no network request.
+    ///
+    /// # Errors
+    ///
+    /// Rejects invalid credentials, identifiers, token limits, or client setup.
+    pub fn with_limits(
+        api_key: impl Into<String>,
+        model: impl Into<String>,
+        maximum_output_tokens: u32,
+        timeout: Duration,
+    ) -> Result<Self, ProviderError> {
+        if timeout.is_zero() || timeout > Duration::from_mins(5) {
+            return Err(ProviderError::new("OpenAI request timeout is invalid"));
+        }
+        let transport = ReqwestOpenAiTransport::new(timeout)?;
+        Self::with_transport(api_key, model, maximum_output_tokens, transport)
     }
 }
 
@@ -157,6 +181,15 @@ impl<T: OpenAiTransport> OpenAiProvider<T> {
     #[must_use]
     pub const fn transport(&self) -> &T {
         &self.transport
+    }
+
+    /// Returns the exact encoded HTTP request-body size without sending it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an encoding error for an invalid contract representation.
+    pub fn encoded_request_bytes(&self, request: &ContractRequest) -> Result<usize, ProviderError> {
+        Ok(encode_request(request, &self.model, self.maximum_output_tokens)?.len())
     }
 }
 

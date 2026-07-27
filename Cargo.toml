@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "bins/noema-m3-demo",
     "bins/noema-m4-demo",
+    "bins/noema-live-eval",
     "bins/noema-test-workload",
     "crates/noema-contract",
     "crates/noema-executor",

@@ -47,5 +47,9 @@ docker compose -f docker/compose.yaml run --build --rm m4-contract
 docker compose -f docker/compose.yaml down --volumes --remove-orphans
 ```
 
+The final M4 cloud compatibility call has a separate opt-in runner. Start with
+the non-networked dry-run and follow [the live-evaluation procedure](docs/live-model-eval.md);
+normal builds and tests never read an API key.
+
 Docker is the daily integration environment. QEMU is reserved for behavior
 that requires a real boot, PID 1, system cgroups, or generation rollback.

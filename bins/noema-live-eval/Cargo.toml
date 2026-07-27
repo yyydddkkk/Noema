@@ -1,0 +1,25 @@
+[package]
+name = "noema-live-eval"
+description = "Explicitly enabled, budgeted cloud-model compatibility evaluation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[features]
+default = []
+live-eval = ["noema-protocol/openai"]
+
+[[bin]]
+name = "noema-live-eval"
+path = "src/main.rs"
+required-features = ["live-eval"]
+
+[dependencies]
+noema-contract.workspace = true
+noema-ir.workspace = true
+noema-protocol.workspace = true
+noema-reconciler.workspace = true
+
+[lints]
+workspace = true

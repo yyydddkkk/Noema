@@ -628,6 +628,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "noema-live-eval"
+version = "0.1.0"
+dependencies = [
+ "noema-contract",
+ "noema-ir",
+ "noema-protocol",
+ "noema-reconciler",
+]
+
+[[package]]
 name = "noema-m3-demo"
 version = "0.1.0"
 dependencies = [
